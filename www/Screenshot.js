@@ -22,13 +22,14 @@ module.exports = {
 		}, "Screenshot", "saveScreenshot", [format, quality, filename]);
 	},
 
-	URI:function(callback, quality){
+	URI:function(callback, quality, fromWebView){
 		quality = typeof(quality) !== 'number'?100:quality;
+        fromWebView = fromWebView || false;
 		exec(function(res){
 			callback && callback(null, res);
 		}, function(error){
 			callback && callback(error);
-		}, "Screenshot", "getScreenshotAsURI", [quality]);
+		}, "Screenshot", "getScreenshotAsURI", [quality, fromWebView]);
 
 	},
 

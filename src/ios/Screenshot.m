@@ -10,6 +10,7 @@
 //
 
 #import <Cordova/CDV.h>
+#import <WebKit/WebKit.h>
 #import "Screenshot.h"
 
 @implementation Screenshot
@@ -73,16 +74,59 @@ CGFloat statusBarHeight()
 	[self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
+
+- (void) getScreenshotAsURIResult: (UIImage*)image quality: (NSNumber*) quality command: (CDVInvokedUrlCommand*)command
+{
+  NSData *imageData = UIImageJPEGRepresentation(image,[quality floatValue]);
+  NSString *base64Encoded = [imageData base64EncodedStringWithOptions:0];
+  NSDictionary *jsonObj = @{
+      @"URI" : [NSString stringWithFormat:@"data:image/jpeg;base64,%@", base64Encoded]
+  };
+  CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:jsonObj];
+  [self.commandDelegate sendPluginResult:pluginResult callbackId:[command callbackId]];
+
+}
+
 - (void) getScreenshotAsURI:(CDVInvokedUrlCommand*)command
 {
-	NSNumber *quality = command.arguments[0];
-	UIImage *image = [self getScreenshot];
-	NSData *imageData = UIImageJPEGRepresentation(image,[quality floatValue]);
-	NSString *base64Encoded = [imageData base64EncodedStringWithOptions:0];
-	NSDictionary *jsonObj = @{
-	    @"URI" : [NSString stringWithFormat:@"data:image/jpeg;base64,%@", base64Encoded]
-	};
-	CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:jsonObj];
-	[self.commandDelegate sendPluginResult:pluginResult callbackId:[command callbackId]];
+  NSNumber *quality = command.arguments[0];
+  BOOL fromWebView = [command.arguments[1] boolValue];
+  UIImage *image = nil;
+  
+  if (!fromWebView) {
+    image = [self getScreenshot];
+    [self getScreenshotAsURIResult:image quality:quality command:command];
+  }
+  else if (@available(iOS 11.0, *)) {
+    UIView* webView = [self getActiveWebView];
+    if (webView == nil) return;
+    WKSnapshotConfiguration *wkSnapshotConfig = [WKSnapshotConfiguration new];
+    //CGFloat snapshotWidth = [UIScreen mainScreen].bounds.size.width;
+    //wkSnapshotConfig.snapshotWidth = [NSNumber numberWithFloat:snapshotWidth];    
+    [(WKWebView*) webView takeSnapshotWithConfiguration:wkSnapshotConfig completionHandler:^(UIImage * _Nullable snapshotImage, NSError * _Nullable error) {
+      [self getScreenshotAsURIResult:snapshotImage quality:quality command:command];
+    }];
+  }
 }
+
+- (UIView*)getActiveWebView
+{
+  UIView* activeWebView = nil;
+  Class IABClass = NSClassFromString(@"CDVWKInAppBrowser");
+  if (IABClass != nil) {
+    //id IABObject = [[IABClass alloc] init];
+    SEL selector = NSSelectorFromString(@"getInstance");
+    IMP imp = [IABClass methodForSelector:selector];
+    id (*func)(Class, SEL) = (id (*)(Class,SEL))imp;
+    id IABInstance = func(IABClass, selector);
+    id IABViewController = [IABInstance valueForKey:@"inAppBrowserViewController"];
+    id IABWebView = [IABViewController valueForKey:@"webView"];
+    activeWebView = (UIView*)IABWebView;
+  }
+  if (activeWebView == nil)
+    activeWebView = self.webViewEngine.engineWebView;
+  
+  return activeWebView;
+}
+
 @end
